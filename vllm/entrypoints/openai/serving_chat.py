@@ -14,7 +14,7 @@ from vllm.entrypoints.openai.serving_engine import LoRA, OpenAIServing
 from vllm.logger import init_logger
 from vllm.model_executor.guided_decoding import (
     get_guided_decoding_logits_processor)
-from vllm.outputs import RequestOutput
+from vllm.outputs import CompletionRequestOutput
 from vllm.utils import random_uuid
 
 logger = init_logger(__name__)
@@ -101,7 +101,8 @@ class OpenAIServingChat(OpenAIServing):
 
     async def chat_completion_stream_generator(
             self, request: ChatCompletionRequest,
-            result_generator: AsyncIterator[RequestOutput], request_id: str
+            result_generator: AsyncIterator[CompletionRequestOutput],
+            request_id: str
     ) -> Union[ErrorResponse, AsyncGenerator[str, None]]:
 
         model_name = request.model
@@ -115,7 +116,7 @@ class OpenAIServingChat(OpenAIServing):
         finish_reason_sent = [False] * request.n
         try:
             async for res in result_generator:
-                res: RequestOutput
+                res: CompletionRequestOutput
                 # We need to do it here, because if there are exceptions in
                 # the result_generator, it needs to be sent as the FIRST
                 # response (by the try...catch).
@@ -243,12 +244,12 @@ class OpenAIServingChat(OpenAIServing):
 
     async def chat_completion_full_generator(
             self, request: ChatCompletionRequest, raw_request: Request,
-            result_generator: AsyncIterator[RequestOutput],
+            result_generator: AsyncIterator[CompletionRequestOutput],
             request_id: str) -> Union[ErrorResponse, ChatCompletionResponse]:
 
         model_name = request.model
         created_time = int(time.time())
-        final_res: RequestOutput = None
+        final_res: CompletionRequestOutput = None
 
         async for res in result_generator:
             if await raw_request.is_disconnected():

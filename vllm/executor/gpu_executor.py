@@ -42,7 +42,8 @@ class GPUExecutor(ExecutorBase):
         self._init_worker()
 
         # Profile the memory usage and initialize the cache.
-        self._init_cache()
+        if not self.model_config.embedding_mode:
+            self._init_cache()
 
     def _init_worker(self):
         # Lazy import the Worker to avoid importing torch.cuda/xformers

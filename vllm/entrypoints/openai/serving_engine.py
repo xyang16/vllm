@@ -6,7 +6,8 @@ from typing import Dict, List, Optional, Union
 
 from vllm.engine.async_llm_engine import AsyncLLMEngine
 from vllm.entrypoints.openai.protocol import (ChatCompletionRequest,
-                                              CompletionRequest, ErrorResponse,
+                                              CompletionRequest,
+                                              EmbeddingRequest, ErrorResponse,
                                               LogProbs, ModelCard, ModelList,
                                               ModelPermission)
 from vllm.logger import init_logger
@@ -162,7 +163,8 @@ class OpenAIServing:
 
     def _validate_prompt_and_tokenize(
             self,
-            request: Union[ChatCompletionRequest, CompletionRequest],
+            request: Union[ChatCompletionRequest, CompletionRequest,
+                           EmbeddingRequest],
             prompt: Optional[str] = None,
             prompt_ids: Optional[List[int]] = None) -> List[int]:
         if not (prompt or prompt_ids):
@@ -174,6 +176,10 @@ class OpenAIServing:
         input_ids = prompt_ids if prompt_ids is not None else self.tokenizer(
             prompt).input_ids
         token_num = len(input_ids)
+
+        # Note: EmbeddingRequest doesn't have max_tokens
+        if isinstance(request, EmbeddingRequest):
+            return input_ids
 
         if request.max_tokens is None:
             request.max_tokens = self.max_model_len - token_num

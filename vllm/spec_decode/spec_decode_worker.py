@@ -5,8 +5,8 @@ import torch
 
 from vllm.config import CacheConfig
 from vllm.model_executor.layers.rejection_sampler import RejectionSampler
-from vllm.sequence import (SamplerOutput, SequenceGroupMetadata,
-                           SequenceGroupOutput, SequenceOutput)
+from vllm.sequence import (CompletionSequenceGroupOutput, SamplerOutput,
+                           SequenceGroupMetadata, SequenceOutput)
 from vllm.spec_decode.batch_expansion import BatchExpansionTop1Scorer
 from vllm.spec_decode.interfaces import (SpeculativeProposals,
                                          SpeculativeScorer, SpeculativeScores)
@@ -309,7 +309,7 @@ class SpecDecodeWorker:
             step_output_token_ids = []
             for token_id, seq_id in zip(token_ids_by_step, seq_ids):
                 step_output_token_ids.append(
-                    SequenceGroupOutput(
+                    CompletionSequenceGroupOutput(
                         samples=[
                             SequenceOutput(
                                 parent_seq_id=seq_id,

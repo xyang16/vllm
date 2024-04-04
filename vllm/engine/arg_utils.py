@@ -66,6 +66,7 @@ class EngineArgs:
 
     scheduler_delay_factor: float = 0.0
     enable_chunked_prefill: bool = False
+    embedding_mode: bool = False
 
     # Speculative decoding configuration.
     speculative_model: Optional[str] = None
@@ -390,20 +391,21 @@ class EngineArgs:
             default=False,
             help='If True, the prefill requests can be chunked based on the '
             'max_num_batched_tokens')
-
         parser.add_argument(
             '--speculative-model',
             type=str,
             default=None,
             help=
             'The name of the draft model to be used in speculative decoding.')
-
         parser.add_argument(
             '--num-speculative-tokens',
             type=int,
             default=None,
             help='The number of speculative tokens to sample from '
             'the draft model in speculative decoding')
+        parser.add_argument("--embedding-mode",
+                            action="store_true",
+                            help="Enable embedding mode for the server")
         return parser
 
     @classmethod
@@ -422,7 +424,8 @@ class EngineArgs:
             self.dtype, self.seed, self.revision, self.code_revision,
             self.tokenizer_revision, self.max_model_len, self.quantization,
             self.quantization_param_path, self.enforce_eager,
-            self.max_context_len_to_capture, self.max_logprobs)
+            self.max_context_len_to_capture, self.max_logprobs,
+            self.embedding_mode)
         cache_config = CacheConfig(self.block_size,
                                    self.gpu_memory_utilization,
                                    self.swap_space, self.kv_cache_dtype,
@@ -457,6 +460,7 @@ class EngineArgs:
                                  speculative_config.num_lookahead_slots),
             delay_factor=self.scheduler_delay_factor,
             enable_chunked_prefill=self.enable_chunked_prefill,
+            embedding_mode=model_config.embedding_mode,
         )
         lora_config = LoRAConfig(
             max_lora_rank=self.max_lora_rank,

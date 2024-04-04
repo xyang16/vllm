@@ -7,7 +7,7 @@ from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 from vllm.engine.arg_utils import EngineArgs
 from vllm.engine.llm_engine import LLMEngine
 from vllm.lora.request import LoRARequest
-from vllm.outputs import RequestOutput
+from vllm.outputs import CompletionRequestOutput, EmbeddingRequestOutput
 from vllm.sampling_params import SamplingParams
 from vllm.sequence import MultiModalData
 from vllm.usage.usage_lib import UsageContext
@@ -68,6 +68,8 @@ class LLM:
             When a sequence has context length larger than this, we fall back
             to eager mode.
         disable_custom_all_reduce: See ParallelConfig
+        embedding_mode: Whether the running model is for embedding. It should
+            be used for embedding models.
     """
 
     def __init__(
@@ -87,6 +89,7 @@ class LLM:
         enforce_eager: bool = False,
         max_context_len_to_capture: int = 8192,
         disable_custom_all_reduce: bool = True,
+        embedding_mode: bool = False,
         **kwargs,
     ) -> None:
         if "disable_log_stats" not in kwargs:
@@ -107,6 +110,7 @@ class LLM:
             enforce_eager=enforce_eager,
             max_context_len_to_capture=max_context_len_to_capture,
             disable_custom_all_reduce=disable_custom_all_reduce,
+            embedding_mode=embedding_mode,
             **kwargs,
         )
         self.llm_engine = LLMEngine.from_engine_args(
@@ -131,7 +135,7 @@ class LLM:
         use_tqdm: bool = True,
         lora_request: Optional[LoRARequest] = None,
         multi_modal_data: Optional[MultiModalData] = None,
-    ) -> List[RequestOutput]:
+    ) -> List[Union[CompletionRequestOutput, EmbeddingRequestOutput]]:
         """Generates the completions for the input prompts.
 
         NOTE: This class automatically batches the given prompts, considering
@@ -205,7 +209,9 @@ class LLM:
                                     lora_request=lora_request,
                                     multi_modal_data=multi_modal_data)
 
-    def _run_engine(self, use_tqdm: bool) -> List[RequestOutput]:
+    def _run_engine(
+        self, use_tqdm: bool
+    ) -> List[Union[CompletionRequestOutput, EmbeddingRequestOutput]]:
         # Initialize tqdm.
         if use_tqdm:
             num_requests = self.llm_engine.get_num_unfinished_requests()
@@ -213,7 +219,8 @@ class LLM:
                         desc="Processed prompts",
                         dynamic_ncols=True)
         # Run the engine.
-        outputs: List[RequestOutput] = []
+        outputs: List[Union[CompletionRequestOutput,
+                            EmbeddingRequestOutput]] = []
         while self.llm_engine.has_unfinished_requests():
             step_outputs = self.llm_engine.step()
             for output in step_outputs:

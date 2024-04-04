@@ -66,7 +66,8 @@ class RayGPUExecutor(ExecutorBase):
         self._init_workers_ray(placement_group)
 
         # Profile the memory usage and initialize the cache.
-        self._init_cache()
+        if not self.model_config.embedding_mode:
+            self._init_cache()
 
         self.forward_dag = None
         if USE_RAY_COMPILED_DAG:
