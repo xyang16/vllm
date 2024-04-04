@@ -82,15 +82,15 @@ def merge_async_iterators(*iterators):
     return consumer()
 
 
-class OpenAIServingEmbedding(OpenAIServing):
+class OpenAIServingEmbeddings(OpenAIServing):
 
     def __init__(self, engine: AsyncLLMEngine, served_model: str):
         super().__init__(engine=engine,
                          served_model=served_model,
                          lora_modules=None)
 
-    async def create_embedding(self, request: EmbeddingRequest,
-                               raw_request: Request):
+    async def create_embeddings(self, request: EmbeddingRequest,
+                                raw_request: Request):
         """Completion API similar to OpenAI's API.
 
         See https://platform.openai.com/docs/api-reference/embeddings/create
