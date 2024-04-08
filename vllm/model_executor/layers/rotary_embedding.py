@@ -336,6 +336,80 @@ class YaRNScalingRotaryEmbedding(RotaryEmbedding):
         return cache
 
 
+class DynamicYaRNScalingRotaryEmbedding(RotaryEmbedding):
+    """RotaryEmbedding extended with Dynamic YaRN method.
+    See: https://arxiv.org/abs/2309.00071
+
+    Credits to Peng et al. github.com/jquesnelle/yarn
+    """
+
+    def __init__(
+        self,
+        scaling_factor,
+        dim,
+        max_position_embeddings,
+        base,
+        original_max_position_embeddings,
+        extrapolation_factor,
+        attn_factor,
+        beta_fast,
+        beta_slow,
+        finetuned=False,
+        device=None
+    ):
+        self.scaling_factor = scaling_factor
+        self.dim = dim
+        self.max_position_embeddings = max_position_embeddings
+        self.base = base
+        self.original_max_position_embeddings = original_max_position_embeddings
+        self.extrapolation_factor = extrapolation_factor
+        self.attn_factor = attn_factor
+        self.beta_fast = beta_fast
+        self.beta_slow = beta_slow
+        self.mscale = float(
+            _yarn_get_mscale(self.scaling_factor) * self.attn_factor
+        )  # Get n-d magnitude scaling corrected for interpolation
+        if finetuned:
+            inv_freq = self._compute_inv_freq(max_position_embeddings / self.original_max_position_embeddings, device)
+        else:
+            inv_freq = 1.0 / (
+                    base
+                    ** (torch.arange(0, dim, 2, device=device, dtype=torch.float32) / dim)
+            )
+        super().__init__(inv_freq)
+
+    def _compute_inv_freq(self, scaling_factor, device=None):
+        pos_freqs = self.base ** (torch.arange(0, self.dim, 2, dtype=torch.float32, device=device) / self.dim)
+        inv_freq_extrapolation = 1.0 / pos_freqs
+        inv_freq_interpolation = 1.0 / (scaling_factor * pos_freqs)
+
+        low, high = _yarn_find_correction_range(self.beta_fast, self.beta_slow, self.dim, self.base,
+                                                self.original_max_position_embeddings)
+        # Get n-d rotational scaling corrected for extrapolation
+        inv_freq_mask = (1 - _yarn_linear_ramp_mask(low, high, self.dim // 2, device)) * self.extrapolation_factor
+        inv_freq = inv_freq_interpolation * (1 - inv_freq_mask) + inv_freq_extrapolation * inv_freq_mask
+        return inv_freq
+
+    def _update_cos_sin_cache(self, seq_len, dtype, device):
+        # Reset the tables if the sequence length has changed,
+        # or if we're on a new device (possibly due to tracing for instance)
+        if (
+                seq_len > self._seq_len_cached
+                or self._cos_cached.device != device
+                or self._cos_cached.dtype != dtype
+        ):
+            self._seq_len_cached = seq_len
+
+            if seq_len > self.max_position_embeddings:
+                scaling_factor = seq_len / self.original_max_position_embeddings
+                self._compute_inv_freq(scaling_factor, device)
+                self.mscale = float(_yarn_get_mscale(scaling_factor) * self.attn_factor)
+            t = torch.arange(self._seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+            freqs = torch.outer(t, self.inv_freq)
+            self._cos_cached = (torch.cos(freqs) * self.mscale).to(dtype)
+            self._sin_cached = (torch.sin(freqs) * self.mscale).to(dtype)
+
+
 _ROPE_DICT: Dict[Tuple, RotaryEmbedding] = {}
 
 
@@ -377,6 +451,12 @@ def get_rope(
                          "beta_slow")
             }
             rotary_emb = YaRNScalingRotaryEmbedding(head_size, rotary_dim,
+                                                    original_max_position,
+                                                    base, is_neox_style,
+                                                    scaling_factor,
+                                                    **extra_kwargs)
+        elif scaling_type == "dynamic-yarn":
+            rotary_emb = DynamicYaRNScalingRotaryEmbedding(head_size, rotary_dim,
                                                     original_max_position,
                                                     base, is_neox_style,
                                                     scaling_factor,
