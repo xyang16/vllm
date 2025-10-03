@@ -18,7 +18,7 @@ from vllm.logger import init_logger
 # yapf: disable
 from vllm.lora.layers import (BaseLayerWithLoRA, ColumnParallelLinearWithLoRA,
                               ColumnParallelLinearWithShardedLoRA,
-                              LogitsProcessorWithLoRA,
+                              FusedMoEWithLoRA, LogitsProcessorWithLoRA,
                               MergedColumnParallelLinearWithLoRA,
                               MergedColumnParallelLinearWithShardedLoRA,
                               MergedQKVParallelLinearWithLoRA,
@@ -29,6 +29,7 @@ from vllm.lora.layers import (BaseLayerWithLoRA, ColumnParallelLinearWithLoRA,
                               RowParallelLinearWithLoRA,
                               RowParallelLinearWithShardedLoRA,
                               VocabParallelEmbeddingWithLoRA)
+from vllm.model_executor.layers.fused_moe import FusedMoE
 from vllm.model_executor.layers.linear import LinearBase
 
 # yapf: enable
@@ -55,6 +56,7 @@ _all_lora_classes: set[type[BaseLayerWithLoRA]] = {
     MergedColumnParallelLinearWithShardedLoRA,
     MergedQKVParallelLinearWithShardedLoRA,
     RowParallelLinearWithShardedLoRA,
+    FusedMoEWithLoRA,
 }
 
 
@@ -198,6 +200,9 @@ def get_supported_lora_modules(model: nn.Module) -> list[str]:
 
         # get all the linear subfixes.
         if isinstance(module, (LinearBase, )):
+            supported_lora_modules.add(name.split(".")[-1])
+
+        if isinstance(module, (FusedMoE, )):
             supported_lora_modules.add(name.split(".")[-1])
 
     return list(supported_lora_modules)

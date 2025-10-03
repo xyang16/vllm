@@ -14,6 +14,7 @@ from vllm.lora.layers.row_parallel_linear import (
 from vllm.lora.layers.utils import LoRAMapping
 from vllm.lora.layers.vocal_parallel_embedding import (
     VocabParallelEmbeddingWithLoRA)
+from vllm.lora.layers.fused_moe import FusedMoEWithLoRA
 
 __all__ = [
     "BaseLayerWithLoRA",
@@ -31,4 +32,5 @@ __all__ = [
     "RowParallelLinearWithShardedLoRA",
     "ReplicatedLinearWithLoRA",
     "LoRAMapping",
+    "FusedMoEWithLoRA",
 ]

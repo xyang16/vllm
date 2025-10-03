@@ -514,6 +514,9 @@ class FusedMoEPermuteExpertsUnpermute(ABC):
             torch.ops._C.silu_and_mul(output, input)
         elif activation == "gelu":
             torch.ops._C.gelu_and_mul(output, input)
+        elif activation == "swigluoai":
+            # alpha = 1.702, limit = 7.0
+            torch.ops._C.swigluoai_and_mul(output, input)
         else:
             raise ValueError(f"Unsupported FusedMoe activation: {activation}")
 
@@ -668,10 +671,15 @@ class FusedMoEModularKernel(torch.nn.Module):
         global_num_experts: int,
         local_num_experts: int,
         expert_map: Optional[torch.Tensor],
+        w1_scale: Optional[torch.Tensor],
+        w2_scale: Optional[torch.Tensor],
+        w1_zp: Optional[torch.Tensor],
+        w2_zp: Optional[torch.Tensor],
         a1q_scale: Optional[torch.Tensor],
         a2_scale: Optional[torch.Tensor],
         expert_tokens_meta: Optional[ExpertTokensMetadata],
         apply_router_weight_on_input: bool,
+        extra_expert_args: Optional[dict] = None,
     ) -> torch.Tensor:
 
         _, M, N, K, top_k = _moe_problem_size(a1q, w1, w2, topk_ids)
@@ -716,7 +724,7 @@ class FusedMoEModularKernel(torch.nn.Module):
             workspace2=workspace2,
             expert_tokens_meta=expert_tokens_meta,
             apply_router_weight_on_input=apply_router_weight_on_input,
-        )
+            extra_expert_args=extra_expert_args)
 
         return fused_out
 
@@ -735,6 +743,7 @@ class FusedMoEModularKernel(torch.nn.Module):
         a1q_scale: Optional[torch.Tensor],
         expert_tokens_meta: Optional[ExpertTokensMetadata],
         apply_router_weight_on_input: bool,
+        extra_expert_args: Optional[dict] = None,
     ) -> torch.Tensor:
 
         _, M, N, K, top_k = _moe_problem_size(a1q, w1, w2, topk_ids)
@@ -762,6 +771,7 @@ class FusedMoEModularKernel(torch.nn.Module):
                 a2_scale=self.fused_experts.a2_scale,
                 expert_tokens_meta=expert_tokens_meta,
                 apply_router_weight_on_input=apply_router_weight_on_input,
+                extra_expert_args=extra_expert_args,
             )
 
         # Chunking required case
@@ -850,23 +860,31 @@ class FusedMoEModularKernel(torch.nn.Module):
                 a2_scale=c_a2_scale,
                 expert_tokens_meta=c_expert_tokens_meta,
                 apply_router_weight_on_input=apply_router_weight_on_input,
+                extra_expert_args=extra_expert_args,
             )
 
         return fused_out
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        w1: torch.Tensor,
-        w2: torch.Tensor,
-        topk_weights: torch.Tensor,
-        topk_ids: torch.Tensor,
-        inplace: bool = False,
-        activation: str = "silu",
-        global_num_experts: int = -1,
-        expert_map: Optional[torch.Tensor] = None,
-        apply_router_weight_on_input: bool = False,
-    ) -> Union[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+    def forward(self,
+                hidden_states: torch.Tensor,
+                w1: torch.Tensor,
+                w2: torch.Tensor,
+                topk_weights: torch.Tensor,
+                topk_ids: torch.Tensor,
+                inplace: bool = False,
+                activation: str = "silu",
+                global_num_experts: int = -1,
+                expert_map: Optional[torch.Tensor] = None,
+                w1_scale: Optional[torch.Tensor] = None,
+                w2_scale: Optional[torch.Tensor] = None,
+                w1_zp: Optional[torch.Tensor] = None,
+                w2_zp: Optional[torch.Tensor] = None,
+                a1_scale: Optional[torch.Tensor] = None,
+                a2_scale: Optional[torch.Tensor] = None,
+                apply_router_weight_on_input: bool = False,
+                extra_expert_args: Optional[dict] = None,
+                extra_prepare_args: Optional[dict] = None,
+                extra_finalize_args: Optional[dict] = None) -> torch.Tensor:
         """
         This function computes a Mixture of Experts (MoE) layer using two sets
         of weights, w1 and w2, and top-k gating mechanism.

@@ -1482,6 +1482,19 @@ def moe_align_block_size(topk_ids: torch.Tensor, num_experts: int,
                                           num_tokens_post_pad)
 
 
+def moe_lora_align_block_size(topk_ids: torch.Tensor,
+                              token_lora_mapping: torch.Tensor,
+                              num_experts: int, block_size: int,
+                              max_loras: int, sorted_token_ids: torch.Tensor,
+                              experts_ids: torch.Tensor,
+                              num_tokens_post_pad: torch.Tensor) -> None:
+    torch.ops._moe_C.moe_lora_align_block_size(topk_ids, token_lora_mapping,
+                                               num_experts, block_size,
+                                               max_loras, sorted_token_ids,
+                                               experts_ids,
+                                               num_tokens_post_pad)
+
+
 def moe_wna16_gemm(input: torch.Tensor, output: torch.Tensor,
                    b_qweight: torch.Tensor, b_scales: torch.Tensor,
                    b_qzeros: Optional[torch.Tensor],
@@ -1629,6 +1642,20 @@ def concat_and_cache_mla(
     torch.ops._C_cache_ops.concat_and_cache_mla(kv_c, k_pe, kv_cache,
                                                 slot_mapping, kv_cache_dtype,
                                                 scale)
+
+
+def cp_fused_concat_and_cache_mla(
+    kv_c: torch.Tensor,
+    k_pe: torch.Tensor,
+    cp_local_token_select_indices: torch.Tensor,
+    kv_cache: torch.Tensor,
+    slot_mapping: torch.Tensor,
+    kv_cache_dtype: str,
+    scale: torch.Tensor,
+) -> None:
+    torch.ops._C_cache_ops.cp_fused_concat_and_cache_mla(
+        kv_c, k_pe, cp_local_token_select_indices, kv_cache, slot_mapping,
+        kv_cache_dtype, scale)
 
 
 def copy_blocks(key_caches: list[torch.Tensor],
