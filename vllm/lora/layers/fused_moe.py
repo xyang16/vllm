@@ -89,7 +89,7 @@ class FusedMoEWithLoRA(BaseLayerWithLoRA):
                     layer.w2_weight.size(),
                     top_k,
                     config_dtype,
-                    block_shape=layer.quant_method.moe.block_shape,
+                    block_shape=None #layer.quant_method.moe.block_shape,
                 )
 
                 config = get_config_func(M)
@@ -160,7 +160,7 @@ class FusedMoEWithLoRA(BaseLayerWithLoRA):
                     layer.w2_weight.size(),
                     top_k,
                     config_dtype,
-                    block_shape=layer.quant_method.moe.block_shape,
+                    block_shape=None, #layer.quant_method.moe.block_shape,
                 )
 
                 config = get_config_func(M)

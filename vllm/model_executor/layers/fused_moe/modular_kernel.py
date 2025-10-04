@@ -398,67 +398,67 @@ class FusedMoEPermuteExpertsUnpermute(ABC):
 
     @property
     def quant_dtype(self) -> Optional[torch.dtype]:
-        return self.quant_config.quant_dtype
+        return self.quant_config.quant_dtype if self.quant_config else None
 
     @property
     def block_shape(self) -> Optional[list[int]]:
-        return self.quant_config.block_shape
+        return self.quant_config.block_shape if self.quant_config else None
 
     @property
     def per_act_token_quant(self) -> bool:
-        return self.quant_config.per_act_token_quant
+        return self.quant_config.per_act_token_quant if self.quant_config else None
 
     @property
     def per_out_ch_quant(self) -> bool:
-        return self.quant_config.per_out_ch_quant
+        return self.quant_config.per_out_ch_quant if self.quant_config else None
 
     @property
     def a1_scale(self) -> Optional[torch.Tensor]:
-        return self.quant_config.a1_scale
+        return self.quant_config.a1_scale if self.quant_config else None
 
     @property
     def a2_scale(self) -> Optional[torch.Tensor]:
-        return self.quant_config.a2_scale
+        return self.quant_config.a2_scale if self.quant_config else None
 
     @property
     def a1_gscale(self) -> Optional[torch.Tensor]:
-        return self.quant_config.a1_gscale
+        return self.quant_config.a1_gscale if self.quant_config else None
 
     @property
     def a2_gscale(self) -> Optional[torch.Tensor]:
-        return self.quant_config.a2_gscale
+        return self.quant_config.a2_gscale if self.quant_config else None
 
     @property
     def w1_scale(self) -> Optional[torch.Tensor]:
-        return self.quant_config.w1_scale
+        return self.quant_config.w1_scale if self.quant_config else None
 
     @property
     def w2_scale(self) -> Optional[torch.Tensor]:
-        return self.quant_config.w2_scale
+        return self.quant_config.w2_scale if self.quant_config else None
 
     @property
     def w1_zp(self) -> Optional[torch.Tensor]:
-        return self.quant_config.w1_zp
+        return self.quant_config.w1_zp if self.quant_config else None
 
     @property
     def w2_zp(self) -> Optional[torch.Tensor]:
-        return self.quant_config.w2_zp
+        return self.quant_config.w2_zp if self.quant_config else None
 
     @property
     def w1_bias(self) -> Optional[torch.Tensor]:
-        return self.quant_config.w1_bias
+        return self.quant_config.w1_bias if self.quant_config else None
 
     @property
     def w2_bias(self) -> Optional[torch.Tensor]:
-        return self.quant_config.w2_bias
+        return self.quant_config.w2_bias if self.quant_config else None
 
     @property
     def g1_alphas(self) -> Optional[torch.Tensor]:
-        return self.quant_config.g1_alphas
+        return self.quant_config.g1_alphas if self.quant_config else None
 
     @property
     def g2_alphas(self) -> Optional[torch.Tensor]:
-        return self.quant_config.g2_alphas
+        return self.quant_config.g2_alphas if self.quant_config else None
 
     # TODO (bnell): make this return a CHUNK_SIZE or None instead?
     @abstractmethod
@@ -671,14 +671,14 @@ class FusedMoEModularKernel(torch.nn.Module):
         global_num_experts: int,
         local_num_experts: int,
         expert_map: Optional[torch.Tensor],
-        w1_scale: Optional[torch.Tensor],
-        w2_scale: Optional[torch.Tensor],
-        w1_zp: Optional[torch.Tensor],
-        w2_zp: Optional[torch.Tensor],
         a1q_scale: Optional[torch.Tensor],
         a2_scale: Optional[torch.Tensor],
         expert_tokens_meta: Optional[ExpertTokensMetadata],
         apply_router_weight_on_input: bool,
+        w1_scale: Optional[torch.Tensor] = None,
+        w2_scale: Optional[torch.Tensor] = None,
+        w1_zp: Optional[torch.Tensor] = None,
+        w2_zp: Optional[torch.Tensor] = None,
         extra_expert_args: Optional[dict] = None,
     ) -> torch.Tensor:
 
@@ -718,6 +718,10 @@ class FusedMoEModularKernel(torch.nn.Module):
             activation=activation,
             global_num_experts=global_num_experts,
             expert_map=expert_map,
+            w1_scale=w1_scale,
+            w2_scale=w2_scale,
+            w1_zp=w1_zp,
+            w2_zp=w2_zp,
             a1q_scale=a1q_scale,
             a2_scale=a2_scale,
             workspace13=workspace13,
@@ -978,7 +982,7 @@ class FusedMoEModularKernel(torch.nn.Module):
 
         fused_out = None
 
-        if a1q.numel() == 0:
+        if a1q is not None and a1q.numel() == 0:
             # This happens when none of the tokens from the all2all reach this
             # EP rank. Also, note that this is only relevant for CUDAGraph
             # incompatible all2all kernels like the DeepEP high-throughput

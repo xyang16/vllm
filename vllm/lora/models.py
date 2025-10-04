@@ -469,6 +469,9 @@ class LoRAModelManager:
                     module_lora.lora_a = lora_a
                     module_lora.lora_b = lora_b
 
+                for i in range(len(module_lora.lora_a)):
+                    module_lora.lora_a[i] = module_lora.lora_a[i].T
+                    module_lora.lora_b[i] = module_lora.lora_b[i].T
                 module.set_lora(index, module_lora.lora_a, module_lora.lora_b,
                                 module_lora.embeddings_tensor,
                                 module_lora.bias)

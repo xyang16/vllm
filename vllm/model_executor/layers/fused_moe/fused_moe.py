@@ -1755,7 +1755,9 @@ class TritonExperts(mk.FusedMoEPermuteExpertsUnpermute):
               apply_router_weight_on_input: bool,
               extra_expert_args: Optional[dict[str, Any]]):
         # Check constraints.
-        if self.quant_config.use_int4_w4a16:
+        # if self.quant_config is None:
+        #     self.quant_config = FUSED_MOE_UNQUANTIZED_CONFIG
+        if self.quant_config and self.quant_config.use_int4_w4a16:
             assert hidden_states.size(-1) // 2 == w1.size(2), (
                 "Hidden size mismatch")
         else:
@@ -1782,7 +1784,7 @@ class TritonExperts(mk.FusedMoEPermuteExpertsUnpermute):
             w1.size(),
             w2.size(),
             top_k_num,
-            self.quant_config.config_name(hidden_states.dtype),
+            None, # self.quant_config.config_name(hidden_states.dtype),
             num_tokens,
             block_shape=self.block_shape,
         )
@@ -1837,10 +1839,10 @@ class TritonExperts(mk.FusedMoEPermuteExpertsUnpermute):
             top_k_num,
             config,
             compute_type=compute_type,
-            use_fp8_w8a8=self.quant_config.use_fp8_w8a8,
-            use_int8_w8a8=self.quant_config.use_int8_w8a8,
-            use_int8_w8a16=self.quant_config.use_int8_w8a16,
-            use_int4_w4a16=self.quant_config.use_int4_w4a16,
+            use_fp8_w8a8=self.quant_config.use_fp8_w8a8 if self.quant_config else False,
+            use_int8_w8a8=self.quant_config.use_int8_w8a8 if self.quant_config else False,
+            use_int8_w8a16=self.quant_config.use_int8_w8a16 if self.quant_config else False,
+            use_int4_w4a16=self.quant_config.use_int4_w4a16 if self.quant_config else False,
             per_channel_quant=self.per_act_token_quant,
             block_shape=self.block_shape,
             B_bias=self.w1_bias,
@@ -1870,10 +1872,10 @@ class TritonExperts(mk.FusedMoEPermuteExpertsUnpermute):
             1,
             config,
             compute_type=compute_type,
-            use_fp8_w8a8=self.quant_config.use_fp8_w8a8,
-            use_int8_w8a8=self.quant_config.use_int8_w8a8,
-            use_int8_w8a16=self.quant_config.use_int8_w8a16,
-            use_int4_w4a16=self.quant_config.use_int4_w4a16,
+            use_fp8_w8a8=self.quant_config.use_fp8_w8a8 if self.quant_config else False,
+            use_int8_w8a8=self.quant_config.use_int8_w8a8 if self.quant_config else False,
+            use_int8_w8a16=self.quant_config.use_int8_w8a16 if self.quant_config else False,
+            use_int4_w4a16=self.quant_config.use_int4_w4a16 if self.quant_config else False,
             per_channel_quant=self.per_act_token_quant,
             block_shape=self.block_shape,
             B_bias=self.w2_bias,
