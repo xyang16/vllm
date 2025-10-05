@@ -441,30 +441,30 @@ class LoRAModelManager:
                     num_experts = module_lora.lora_a.shape[
                         0] // module_lora.rank
                     gate_proj_a = gate_up_proj_lora.lora_a.chunk(num_experts,
-                                                                 dim=-1)
+                                                                 dim=0)
                     up_proj_a = gate_up_proj_lora.lora_a.chunk(num_experts,
-                                                               dim=-1)
-
-                    gate_proj_b = gate_up_proj_lora.lora_b[..., ::2].chunk(
-                        num_experts, dim=0)
-                    up_proj_b = gate_up_proj_lora.lora_b[..., 1::2].chunk(
-                        num_experts, dim=0)
+                                                               dim=0)
+                    # FIXME: How to know which expert to which without id and which is gate vs. up prok
+                    gate_proj_b = gate_up_proj_lora.lora_b[::2, ...].chunk(
+                        num_experts, dim=-1)
+                    up_proj_b = gate_up_proj_lora.lora_b[1::2, ...].chunk(
+                        num_experts, dim=-1)
 
                     down_proj_a = down_proj_lora.lora_a.chunk(num_experts,
-                                                              dim=-1)
-                    down_proj_b = down_proj_lora.lora_b.chunk(num_experts,
                                                               dim=0)
+                    down_proj_b = down_proj_lora.lora_b.chunk(num_experts,
+                                                              dim=-1)
 
                     lora_a = []
                     lora_b = []
                     for i in range(num_experts):
-                        lora_a.append(torch.reshape(gate_proj_a[i], (16, 2880)))
-                        lora_a.append(torch.reshape(down_proj_a[i], (16, 2880)))
-                        lora_a.append(torch.reshape(up_proj_a[i],(16,2880)))
+                        lora_a.append(gate_proj_a[i])
+                        lora_a.append(down_proj_a[i])
+                        lora_a.append(up_proj_a[i])
 
-                        lora_b.append(torch.reshape(gate_proj_b[i], (2880, 16)))
-                        lora_b.append(torch.reshape(down_proj_b[i],(2880, 16)))
-                        lora_b.append(torch.reshape(up_proj_b[i], (2880, 16)))
+                        lora_b.append(gate_proj_b[i])
+                        lora_b.append(down_proj_b[i])
+                        lora_b.append(up_proj_b[i])
 
                     module_lora.lora_a = lora_a
                     module_lora.lora_b = lora_b
