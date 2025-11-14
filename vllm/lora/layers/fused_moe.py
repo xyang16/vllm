@@ -25,9 +25,13 @@ from vllm.model_executor.layers.fused_moe.fused_moe import (
     modular_triton_fused_moe,
     try_get_optimal_moe_config,
 )
+from vllm.model_executor.layers.fused_moe.gpt_oss_triton_kernels_moe import (
+    modular_oai_triton_fused_moe
+)
 from vllm.model_executor.layers.fused_moe.fused_moe_modular_method import (
     FusedMoEModularMethod,
 )
+from vllm.utils.import_utils import has_triton_kernels
 
 
 class FusedMoEWithLoRA(BaseLayerWithLoRA):
@@ -108,15 +112,19 @@ class FusedMoEWithLoRA(BaseLayerWithLoRA):
         self.base_layer.ensure_moe_quant_config_init()
         quant_config = self.base_layer.quant_method.moe_quant_config
 
-        m_fused_moe_fn = (
-            modular_triton_fused_moe(
+        if quant_config.use_mxfp4_w4a16:
+            if has_triton_kernels():
+                m_fused_moe_fn = modular_oai_triton_fused_moe(
+                    quant_config, shared_experts=self.base_layer.shared_experts
+                )
+            else:
+                m_fused_moe_fn = modular_marlin_fused_moe(
+                    quant_config, shared_experts=self.base_layer.shared_experts
+                )
+        else:
+            m_fused_moe_fn = modular_triton_fused_moe(
                 quant_config, shared_experts=self.base_layer.shared_experts
             )
-            if not quant_config.use_mxfp4_w4a16
-            else modular_marlin_fused_moe(
-                quant_config, shared_experts=self.base_layer.shared_experts
-            )
-        )
 
         def fwd_decorator(layer, func):
             def wrapper(*args, **kwargs):

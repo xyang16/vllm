@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 from collections.abc import Callable
+from enum import Enum
 
 import torch
 
@@ -17,8 +18,29 @@ from vllm.model_executor.layers.fused_moe.modular_kernel import (
     FusedMoEModularKernel,
     FusedMoEPrepareAndFinalize,
 )
+from vllm.model_executor.layers.fused_moe.fused_moe import TritonExperts
+from vllm.model_executor.layers.fused_moe.fused_marlin_moe import (
+    MarlinExperts,
+)
+from vllm.model_executor.layers.fused_moe.gpt_oss_triton_kernels_moe import (
+    OAITritonExperts,
+)
 
 logger = init_logger(__name__)
+
+
+# enum for MoE modular backend
+class MoEModularBackend(Enum):
+    NONE = 0
+
+    # Marlin Backend
+    MARLIN = 1
+
+    # Triton Backend
+    TRITON = 2
+
+    # OAITriton Backend
+    OAI_TRITON = 3
 
 
 @CustomOp.register("modular_fused_moe")
@@ -29,12 +51,19 @@ class FusedMoEModularMethod(FusedMoEMethodBase, CustomOp):
         super().__init__(old_quant_method.moe)
         self.moe_quant_config = old_quant_method.moe_quant_config
         self.fused_experts = experts
+        self.moe_modular_backend = self.get_moe_modular_backend()
         self.disable_expert_map = getattr(
             old_quant_method,
             "disable_expert_map",
             not self.fused_experts.supports_expert_map(),
         )
         self.old_quant_method = old_quant_method
+        if self.moe_modular_backend == MoEModularBackend.OAI_TRITON:
+            self.w13_weight = old_quant_method.w13_weight
+            self.w2_weight = old_quant_method.w2_weight
+        else:
+            self.w13_weight = None
+            self.w2_weight = None
         logger.debug("Swapping out %s", self.old_quant_method.__class__.__name__)
 
     @staticmethod
@@ -80,6 +109,20 @@ class FusedMoEModularMethod(FusedMoEMethodBase, CustomOp):
         self, layer: torch.nn.Module
     ) -> FusedMoEQuantConfig | None:
         return self.moe_quant_config
+
+    def get_moe_modular_backend(self) -> MoEModularBackend:
+        # Backend Selection
+        if isinstance(self.fused_experts.fused_experts, MarlinExperts):
+            logger.info_once("Using Marlin backend")
+            return MoEModularBackend.MARLIN
+        elif isinstance(self.fused_experts.fused_experts, TritonExperts):
+            logger.info_once("Using Triton backend")
+            return MoEModularBackend.TRITON
+        elif isinstance(self.fused_experts.fused_experts, OAITritonExperts):
+            logger.info_once("Using OAITriton backend")
+            return MoEModularBackend.OAI_TRITON
+        else:
+            return MoEModularBackend.NONE
 
     def apply(
         self,
@@ -144,8 +187,8 @@ class FusedMoEModularMethod(FusedMoEMethodBase, CustomOp):
 
         result = self.fused_experts(
             hidden_states=x,
-            w1=layer.w13_weight,
-            w2=layer.w2_weight,
+            w1=self.w13_weight or layer.w13_weight,
+            w2=self.w2_weight or layer.w2_weight,
             topk_weights=topk_weights,
             topk_ids=topk_ids,
             inplace=self.allow_inplace,

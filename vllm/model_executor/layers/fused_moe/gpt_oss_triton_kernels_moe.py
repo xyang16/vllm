@@ -1,9 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
+from collections.abc import Callable
+
 import torch
 
 import vllm.model_executor.layers.fused_moe.modular_kernel as mk
+from vllm import _custom_ops as ops
 from vllm.logger import init_logger
 from vllm.model_executor.layers.fused_moe.config import (
     FUSED_MOE_UNQUANTIZED_CONFIG,
@@ -12,8 +15,14 @@ from vllm.model_executor.layers.fused_moe.config import (
 from vllm.model_executor.layers.fused_moe.topk_weight_and_reduce import (
     TopKWeightAndReduceNoOP,
 )
+from vllm.model_executor.layers.fused_moe.prepare_finalize import (
+    MoEPrepareAndFinalizeNoEP,
+)
 from vllm.triton_utils import tl, triton
 from vllm.utils.import_utils import has_triton_kernels
+from vllm.model_executor.layers.fused_moe.utils import (
+    _resize_cache,
+)
 
 logger = init_logger(__name__)
 
@@ -96,6 +105,7 @@ def triton_kernel_moe_forward(
         routing_data,
         gather_idx,
         scatter_idx,
+        topk=topk,
         activation=activation,
         quant_config=quant_config,
         apply_router_weight_on_input=apply_router_weight_on_input,
@@ -113,13 +123,20 @@ def triton_kernel_fused_experts(
     routing_data,  # RoutingData
     gather_indx,  # GatherIndx
     scatter_indx,  # ScatterIndx
+    topk: int,
     activation: str = "silu",
+    activation_func: Callable[
+        [str, torch.Tensor, torch.Tensor], None
+    ] = None,
+    moe_sum: Callable[[torch.Tensor, torch.Tensor], None] | None = None,
     quant_config: FusedMoEQuantConfig | None = None,
     swiglu_alpha: float = 1.702,
     swiglu_limit: float = 7.0,
     apply_router_weight_on_input: bool = False,
     global_num_experts: int = -1,
     expert_map: torch.Tensor | None = None,
+    intermediate_cache13: torch.Tensor | None = None,
+    intermediate_cache2: torch.Tensor | None = None,
     a1q_scale: torch.Tensor | None = None,
 ) -> torch.Tensor:
     if quant_config is None:
@@ -134,16 +151,21 @@ def triton_kernel_fused_experts(
     assert hidden_states.shape[-1] == w1.shape[-2]
     assert w2.shape[-1] == w1.shape[1]
 
+    M, K = hidden_states.size()
     E, _, N = w1.shape
 
     if global_num_experts == -1:
         global_num_experts = E
 
-    act = FusedActivation(
-        FnSpecs("swiglu", triton_kernels.swiglu.swiglu_fn, ("alpha", "limit")),
-        (swiglu_alpha, swiglu_limit),
-        2,
-    )
+    if activation_func is not None:
+        act = None
+    else:
+        act = FusedActivation(
+            FnSpecs("swiglu", triton_kernels.swiglu.swiglu_fn, ("alpha", "limit")),
+            (swiglu_alpha, swiglu_limit),
+            2,
+        )
+
     gammas = routing_data.gate_scal if routing_data else None
 
     intermediate_cache1 = matmul_ogs(
@@ -157,16 +179,35 @@ def triton_kernel_fused_experts(
         fused_activation=act,
     )
 
+    if activation_func is not None:
+        intermediate_cache2 = _resize_cache(
+            intermediate_cache2, (M * topk, N // 2)
+        )
+        activation_func(
+            activation, intermediate_cache2, intermediate_cache1.view(-1, N)
+        )
+    else:
+        intermediate_cache2 = intermediate_cache1
+
+    if moe_sum is not None:
+        scatter_indx = None
+
     intermediate_cache3 = matmul_ogs(
-        intermediate_cache1,
+        intermediate_cache2,
         w2,
         quant_config.w2_bias,
         routing_data,
         scatter_indx=scatter_indx,
         precision_config=quant_config.w2_precision,
         gammas=None if apply_router_weight_on_input else gammas,
-        y=output_tensor,
+        y=None,
     )
+
+    if moe_sum is not None:
+        intermediate_cache3 = intermediate_cache3.view(-1, topk, K)
+        moe_sum(intermediate_cache3, output_tensor)
+        return output_tensor
+
     return intermediate_cache3
 
 
@@ -239,6 +280,8 @@ class OAITritonExperts(BaseOAITritonExperts):
         # TODO (varun) : Enable activation quantization
         assert quant_config.use_mxfp4_w4a16, "Supports only mxfp4_w4a16"
         super().__init__(quant_config)
+        # self.activation = None
+        # self.moe_sum = None
 
     @property
     def activation_formats(
@@ -263,7 +306,7 @@ class OAITritonExperts(BaseOAITritonExperts):
         expert_tokens_meta: mk.ExpertTokensMetadata | None,
     ) -> tuple[tuple[int, ...], tuple[int, ...], tuple[int, ...]]:
         # workspace are allocated inside the kernel
-        workspace1 = (M, K)
+        workspace1 = (M, topk, max(N, K))
         workspace2 = (0, 0)
         output = (M, K)
         return (workspace1, workspace2, output)
@@ -297,20 +340,39 @@ class OAITritonExperts(BaseOAITritonExperts):
             topk_ids, topk_weights, local_num_experts
         )
 
+        topk = topk_ids.size(1)
         experts_output = triton_kernel_fused_experts(
-            None,
+            output,
             hidden_states,
             w1,
             w2,
             routing_data,
             gather_indx,
             scatter_indx,
+            topk=topk,
             activation=activation,
+            activation_func=self.activation,
+            moe_sum=self.moe_sum,
             quant_config=self.quant_config,
             apply_router_weight_on_input=False,
             global_num_experts=local_num_experts,
             expert_map=None,  # applied already
+            intermediate_cache13=workspace2,
+            intermediate_cache2=workspace13,
             a1q_scale=a1q_scale,
         )
 
         output.copy_(experts_output, non_blocking=True)
+
+    def moe_sum(self, input: torch.Tensor, output: torch.Tensor) -> None: # TODO
+        ops.moe_sum(input, output)
+
+
+def modular_oai_triton_fused_moe(
+    quant_config: FusedMoEQuantConfig, shared_experts: torch.nn.Module | None = None
+) -> mk.FusedMoEModularKernel:
+    return mk.FusedMoEModularKernel(
+        MoEPrepareAndFinalizeNoEP(),
+        OAITritonExperts(quant_config),
+        shared_experts,
+    )

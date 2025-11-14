@@ -74,23 +74,8 @@ class Mxfp4Backend(Enum):
     TRITON = 6
 
 
-def get_mxfp4_backend_with_lora() -> Mxfp4Backend:
-    """
-    Not all MXFP4 backends support LoRA. Select backends that are known to
-    have LoRA support.
-    """
-    if not current_platform.is_cuda():
-        return Mxfp4Backend.NONE
-
-    logger.info_once("[get_mxfp4_backend_with_lora] Using Marlin backend")
-    return Mxfp4Backend.MARLIN
-
-
-def get_mxfp4_backend(with_lora_support: bool) -> Mxfp4Backend:
+def get_mxfp4_backend() -> Mxfp4Backend:
     # Backend Selection
-
-    if with_lora_support:
-        return get_mxfp4_backend_with_lora()
 
     if current_platform.is_cuda():
         if (
@@ -215,7 +200,7 @@ class Mxfp4Config(QuantizationConfig):
 class Mxfp4MoEMethod(FusedMoEMethodBase):
     def __init__(self, moe: FusedMoEConfig):
         super().__init__(moe)
-        self.mxfp4_backend = get_mxfp4_backend(moe.is_lora_enabled)
+        self.mxfp4_backend = get_mxfp4_backend()
         self.use_marlin = self.mxfp4_backend == Mxfp4Backend.MARLIN
         self.max_capture_size = (
             get_current_vllm_config().compilation_config.max_cudagraph_capture_size
