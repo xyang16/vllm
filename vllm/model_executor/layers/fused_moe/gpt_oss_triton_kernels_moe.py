@@ -157,14 +157,14 @@ def triton_kernel_fused_experts(
     if global_num_experts == -1:
         global_num_experts = E
 
-    if activation_func is not None:
-        act = None
-    else:
-        act = FusedActivation(
+    fuse_act = activation_func is None
+    fuse_sum = moe_sum is None
+
+    act = FusedActivation(
             FnSpecs("swiglu", triton_kernels.swiglu.swiglu_fn, ("alpha", "limit")),
             (swiglu_alpha, swiglu_limit),
             2,
-        )
+        ) if fuse_act else None
 
     gammas = routing_data.gate_scal if routing_data else None
 
@@ -179,7 +179,7 @@ def triton_kernel_fused_experts(
         fused_activation=act,
     )
 
-    if activation_func is not None:
+    if not fuse_act:
         intermediate_cache2 = _resize_cache(
             intermediate_cache2, (M * topk, N // 2)
         )
@@ -189,8 +189,9 @@ def triton_kernel_fused_experts(
     else:
         intermediate_cache2 = intermediate_cache1
 
-    if moe_sum is not None:
-        scatter_indx = None
+    n_expts_act = routing_data.n_expts_act
+    if not fuse_sum:
+        routing_data.n_expts_act = 1
 
     intermediate_cache3 = matmul_ogs(
         intermediate_cache2,
@@ -203,9 +204,11 @@ def triton_kernel_fused_experts(
         y=None,
     )
 
-    if moe_sum is not None:
-        intermediate_cache3 = intermediate_cache3.view(-1, topk, K)
-        moe_sum(intermediate_cache3, output_tensor)
+    if not fuse_sum:
+        moe_sum(intermediate_cache3.view(-1, topk, K), output_tensor)
+
+        # Set the original n_expts_act back
+        routing_data.n_expts_act = n_expts_act
         return output_tensor
 
     return intermediate_cache3
@@ -306,7 +309,7 @@ class OAITritonExperts(BaseOAITritonExperts):
         expert_tokens_meta: mk.ExpertTokensMetadata | None,
     ) -> tuple[tuple[int, ...], tuple[int, ...], tuple[int, ...]]:
         # workspace are allocated inside the kernel
-        workspace1 = (M, topk, max(N, K))
+        workspace1 = (M, topk, max(N // 2, K))
         workspace2 = (0, 0)
         output = (M, K)
         return (workspace1, workspace2, output)
