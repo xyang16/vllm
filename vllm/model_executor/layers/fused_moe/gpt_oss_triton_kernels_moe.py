@@ -113,7 +113,6 @@ def triton_kernel_moe_forward(
         expert_map=expert_map,
     )
 
-
 # This is a triton implementation of the fused_experts function
 def triton_kernel_fused_experts(
     output_tensor: torch.Tensor,
@@ -201,7 +200,6 @@ def triton_kernel_fused_experts(
         scatter_indx=scatter_indx,
         precision_config=quant_config.w2_precision,
         gammas=None if apply_router_weight_on_input else gammas,
-        y=None,
     )
 
     if not fuse_sum:

@@ -31,6 +31,7 @@ from vllm.model_executor.layers.fused_moe.gpt_oss_triton_kernels_moe import (
 from vllm.model_executor.layers.fused_moe.fused_moe_modular_method import (
     FusedMoEModularMethod,
 )
+from vllm.platforms import current_platform
 from vllm.utils.import_utils import has_triton_kernels
 
 
@@ -113,12 +114,14 @@ class FusedMoEWithLoRA(BaseLayerWithLoRA):
         quant_config = self.base_layer.quant_method.moe_quant_config
 
         if quant_config.use_mxfp4_w4a16:
-            if has_triton_kernels():
-                m_fused_moe_fn = modular_oai_triton_fused_moe(
+            if (envs.VLLM_MXFP4_USE_MARLIN
+              or current_platform.get_device_capability()[0] < 9
+              or not has_triton_kernels()):
+                m_fused_moe_fn = modular_marlin_fused_moe(
                     quant_config, shared_experts=self.base_layer.shared_experts
                 )
             else:
-                m_fused_moe_fn = modular_marlin_fused_moe(
+                m_fused_moe_fn = modular_oai_triton_fused_moe(
                     quant_config, shared_experts=self.base_layer.shared_experts
                 )
         else:
