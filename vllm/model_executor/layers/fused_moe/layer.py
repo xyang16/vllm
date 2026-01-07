@@ -1609,8 +1609,8 @@ class FusedMoE(CustomOp):
                 gating_output=router_logits,
                 topk=self.top_k,
                 renormalize=self.renormalize,
-                scoring_func=self.scoring_func,
                 indices_type=indices_type,
+                scoring_func=self.scoring_func,
             )
         else:
             topk_weights, topk_ids = self.custom_routing_function(
