@@ -340,6 +340,11 @@ def _align(x: int, y: int) -> int:
     return cdiv(x, y) * y
 
 
+# Taken from https://github.com/deepseek-ai/DeepGEMM/blob/v2.1.1/csrc/utils/math.hpp#L19
+def get_tma_aligned_size(x):
+    return _align(x, 4)
+
+
 DEFAULT_BLOCK_SIZE = [128, 128]
 
 
