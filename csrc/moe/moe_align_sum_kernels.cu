@@ -218,8 +218,10 @@ __device__ void _moe_align_block_size_small_batch_expert(
   int32_t* cumsum = shared_mem;
   int32_t* tokens_cnts = (int32_t*)(shared_mem + num_experts + 1);
 
-  for (int i = 0; i < num_experts; ++i) {
-    tokens_cnts[(tid + 1) * num_experts + i] = 0;
+  for (size_t i = tid; i < numel; i += stride) {
+    for (int j = 0; j < num_experts; ++j) {
+      tokens_cnts[(i + 1) * num_experts + j] = 0;
+    }
   }
 
   for (size_t i = tid; i < numel; i += stride) {
@@ -230,14 +232,14 @@ __device__ void _moe_align_block_size_small_batch_expert(
       if (expert_id == -1) continue;
     }
     int mask = token_mask == nullptr ? 1 : token_mask[i / topk_num];
-    tokens_cnts[(tid + 1) * num_experts + expert_id] += mask;
+    tokens_cnts[(i + 1) * num_experts + expert_id] += mask;
   }
 
   __syncthreads();
 
   if (tid < num_experts) {
     tokens_cnts[tid] = 0;
-    for (int i = 1; i <= stride; ++i) {
+    for (int i = 1; i <= numel; ++i) {
       tokens_cnts[i * num_experts + tid] +=
           tokens_cnts[(i - 1) * num_experts + tid];
     }
@@ -250,7 +252,7 @@ __device__ void _moe_align_block_size_small_batch_expert(
     for (int i = 1; i <= num_experts; ++i) {
       cumsum[i] =
           cumsum[i - 1] +
-          CEILDIV(tokens_cnts[stride * num_experts + i - 1], block_size) *
+          CEILDIV(tokens_cnts[numel * num_experts + i - 1], block_size) *
               block_size;
     }
     total_tokens_post_pad[model_offset] =
@@ -279,11 +281,11 @@ __device__ void _moe_align_block_size_small_batch_expert(
       if (expert_id == -1) continue;
     }
     int32_t rank_post_pad =
-        tokens_cnts[tid * num_experts + expert_id] + cumsum[expert_id];
+        tokens_cnts[i * num_experts + expert_id] + cumsum[expert_id];
 
     if (token_mask == nullptr || token_mask[i / topk_num]) {
       sorted_token_ids[sorted_token_ids_offset + rank_post_pad] = i;
-      ++tokens_cnts[tid * num_experts + expert_id];
+      ++tokens_cnts[i * num_experts + expert_id];
     }
   }
 }
@@ -509,7 +511,7 @@ void moe_align_block_size(torch::Tensor topk_ids, int64_t num_experts,
         if (small_batch_expert_mode) {
           const int32_t threads = max((int32_t)num_experts, WARP_SIZE);
           const int32_t shared_mem_size =
-              ((threads + 1) * num_experts + (num_experts + 1)) *
+              ((topk_ids.numel() + 1) * num_experts + (num_experts + 1)) *
               sizeof(int32_t);
 
           // threadIdx.x >= fill_threads: counting experts and aligning
@@ -682,7 +684,7 @@ void moe_lora_align_block_size(
         if (small_batch_expert_mode) {
           const int32_t num_thread = max((int32_t)num_experts, 128);
           const int32_t shared_mem =
-              (num_thread + 1) * num_experts * sizeof(int32_t) +
+              (topk_ids.numel() + 1) * num_experts * sizeof(int32_t) +
               (num_experts + 1) * sizeof(int32_t);
           if (shared_mem > device_max_shared_mem) {
             TORCH_CHECK(false, "Shared memory usage exceeds device limit.");
