@@ -104,7 +104,6 @@ def _fused_moe_lora_kernel(
     if moe_enabled == 0:
         # Early exit for the no moe lora case.
         return
-    max_loras = tl.num_programs(axis=2)
     grid_k = tl.cdiv(K, BLOCK_SIZE_K * SPLIT_K)
 
     # calculate pid_m,pid_n
@@ -125,7 +124,7 @@ def _fused_moe_lora_kernel(
         return
     # get the expert_id to process curr shard
     ind = lora_id * stride_el + pid_m
-    expert_id = tl.load(expert_ids_ptr + ind, ind < max_loras * stride_el, -1)
+    expert_id = tl.load(expert_ids_ptr + ind)
     if expert_id == -1:
         return
     # get a_ptr,b_ptr,c_ptr
@@ -138,11 +137,7 @@ def _fused_moe_lora_kernel(
 
     offs_token_id = pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M).to(tl.int64)
     token_ind = stride_tl * lora_id + offs_token_id
-    offs_token = tl.load(
-        sorted_token_ids_ptr + token_ind,
-        mask=token_ind < max_loras * stride_tl,
-        other=num_valid_tokens,
-    )
+    offs_token = tl.load(sorted_token_ids_ptr + token_ind)
     token_mask = offs_token < num_valid_tokens
 
     # get a_ptrs,b_ptrs
