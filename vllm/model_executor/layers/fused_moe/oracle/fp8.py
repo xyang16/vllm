@@ -143,18 +143,31 @@ def select_fp8_moe_backend(
         return Fp8MoeBackend.TRITON, backend_to_kernel_cls(Fp8MoeBackend.TRITON)
 
     # NOTE: the kernels are selected in the following order.
-    AVAILABLE_BACKENDS = [
-        Fp8MoeBackend.AITER,
-        Fp8MoeBackend.FLASHINFER_TRTLLM,
-        Fp8MoeBackend.FLASHINFER_CUTLASS,
-        Fp8MoeBackend.DEEPGEMM,
-        Fp8MoeBackend.BATCHED_DEEPGEMM,
-        Fp8MoeBackend.VLLM_CUTLASS,
-        Fp8MoeBackend.BATCHED_VLLM_CUTLASS,
-        Fp8MoeBackend.TRITON,
-        Fp8MoeBackend.BATCHED_TRITON,
-        Fp8MoeBackend.MARLIN,
-    ]
+    if current_platform.has_device_capability(100):
+        AVAILABLE_BACKENDS = [
+            Fp8MoeBackend.AITER,
+            Fp8MoeBackend.FLASHINFER_TRTLLM,
+            Fp8MoeBackend.FLASHINFER_CUTLASS,
+            Fp8MoeBackend.DEEPGEMM,
+            Fp8MoeBackend.BATCHED_DEEPGEMM,
+            Fp8MoeBackend.VLLM_CUTLASS,
+            Fp8MoeBackend.BATCHED_VLLM_CUTLASS,
+            Fp8MoeBackend.TRITON,
+            Fp8MoeBackend.BATCHED_TRITON,
+            Fp8MoeBackend.MARLIN,
+        ]
+    else:
+        AVAILABLE_BACKENDS = [
+            Fp8MoeBackend.AITER,
+            Fp8MoeBackend.TRITON,
+            Fp8MoeBackend.BATCHED_TRITON,
+            Fp8MoeBackend.FLASHINFER_CUTLASS,
+            Fp8MoeBackend.DEEPGEMM,
+            Fp8MoeBackend.BATCHED_DEEPGEMM,
+            Fp8MoeBackend.VLLM_CUTLASS,
+            Fp8MoeBackend.BATCHED_VLLM_CUTLASS,
+            Fp8MoeBackend.MARLIN,
+        ]
 
     # NOTE(rob): We need to peak into the P/F selection to determine
     # if we are using the batched or standard expert format, which
