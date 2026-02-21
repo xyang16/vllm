@@ -162,6 +162,7 @@ def _fused_moe_lora_kernel(
     b_desc,
     c_ptr,
     topk_weights_ptr,
+    lora_ranks_ptr,
     sorted_token_ids_ptr,
     expert_ids_ptr,
     num_tokens_post_padded_ptr,
@@ -223,6 +224,7 @@ def _fused_moe_lora_kernel(
     #   yes     | no      | False  | expand kernel (num_slices>1)
     #   no      | no      | True   | shrink kernel (num_slices>1)
     sort_c: tl.constexpr,
+    IS_SHRINK: tl.constexpr,
 ):
     pid = tl.program_id(axis=0)
     slice_id = tl.program_id(axis=1)
@@ -260,6 +262,14 @@ def _fused_moe_lora_kernel(
         return
     if lora_id >= max_loras:
         return
+
+    rank = tl.load(lora_ranks_ptr + lora_id)
+
+    # Adjust N (stack_num * max_rank) according to the specific LoRA adapter
+    if IS_SHRINK:
+        N = tl.minimum(N, rank)
+    else:
+        K = tl.minimum(K, rank)
 
     # Non-naive only: check num_tokens_post_padded
     if not naive_block_assignment:
@@ -421,6 +431,7 @@ def _fused_moe_lora_shrink(
         torch.Tensor
     ],  # [(max_loras, num_experts, max_lora_rank, K,),...]
     topk_weights: torch.Tensor,  # (num_tokens, top_k_num)
+    lora_ranks: torch.Tensor,  # (max_loras)
     sorted_token_ids: torch.Tensor | None,  # (max_loras, _)
     expert_ids: torch.Tensor,  # (max_loras, _ ,) or (num_tokens * top_k,)
     num_tokens_post_padded: torch.Tensor | None,  # (max_loras, )
@@ -491,6 +502,7 @@ def _fused_moe_lora_shrink(
         b_desc,
         a_intermediate_cache1,
         topk_weights,
+        lora_ranks,
         sorted_token_ids,
         expert_ids,
         num_tokens_post_padded,
@@ -525,6 +537,7 @@ def _fused_moe_lora_shrink(
         USE_B_L2_CACHE=True,
         sort_c=use_tma and sorted_token_ids is not None,
         IS_PRIMARY=True,
+        IS_SHRINK=True,
         **shrink_config,
     )
 
@@ -537,6 +550,7 @@ def _fused_moe_lora_expand(
         torch.Tensor
     ],  # [(max_loras, num_experts, max_lora_rank, K,),...]
     topk_weights: torch.Tensor,  # (num_tokens, top_k_num)
+    lora_ranks: torch.Tensor,  # (max_loras)
     sorted_token_ids: torch.Tensor | None,  # (max_loras, _)
     expert_ids: torch.Tensor,  # (max_loras, _ ,) or (num_tokens * top_k,)
     num_tokens_post_padded: torch.Tensor | None,  # (max_loras, )
@@ -627,6 +641,7 @@ def _fused_moe_lora_expand(
         b_desc,
         out_view,
         topk_weights,
+        lora_ranks,
         sorted_token_ids,
         expert_ids,
         num_tokens_post_padded,
@@ -661,6 +676,7 @@ def _fused_moe_lora_expand(
         USE_B_L2_CACHE=True,
         sort_c=False,
         IS_PRIMARY=False,
+        IS_SHRINK=False,
         **expand_config,
     )
 
@@ -676,6 +692,7 @@ def _fused_moe_lora(
         torch.Tensor
     ],  # [(max_loras, num_experts, N, max_lora_rank,),...]
     topk_weights: torch.Tensor,  # (num_tokens, top_k_num)
+    lora_ranks: torch.Tensor,  # (max_loras)
     sorted_token_ids: torch.Tensor | None,  # (max_loras, _)
     expert_ids: torch.Tensor,  # (max_loras, _ ,) or (num_tokens * top_k,)
     num_tokens_post_padded: torch.Tensor | None,  # (max_loras, )
@@ -778,6 +795,7 @@ def _fused_moe_lora(
         qcurr_hidden_states,
         lora_a_stacked,
         topk_weights,
+        lora_ranks,
         sorted_token_ids,
         expert_ids,
         num_tokens_post_padded,
@@ -825,6 +843,7 @@ def _fused_moe_lora(
         a_intermediate_cache1,
         lora_b_stacked,
         topk_weights,
+        lora_ranks,
         sorted_token_ids,
         expert_ids,
         num_tokens_post_padded,

@@ -474,6 +474,7 @@ class PunicaWrapperBase(PunicaWrapperABC):
         lora_a_stacked: tuple[torch.Tensor, ...],
         lora_b_stacked: tuple[torch.Tensor, ...],
         topk_weights: torch.Tensor,
+        lora_ranks: torch.Tensor,
         sorted_token_ids: torch.Tensor | None,
         expert_ids: torch.Tensor,
         num_tokens_post_padded: torch.Tensor | None,

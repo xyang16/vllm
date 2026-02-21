@@ -250,6 +250,7 @@ class FusedMoEWithLoRA(BaseLayerWithLoRA):
                     self.w13_lora_a_stacked,
                     self.w13_lora_b_stacked,
                     topk_weights,
+                    self.lora_ranks,
                     sorted_token_ids_lora,
                     expert_ids_lora,
                     num_tokens_post_padded_lora,
@@ -318,6 +319,7 @@ class FusedMoEWithLoRA(BaseLayerWithLoRA):
                     self.w2_lora_a_stacked,
                     self.w2_lora_b_stacked,
                     topk_weights,
+                    self.lora_ranks,
                     sorted_token_ids_lora,
                     expert_ids_lora,
                     num_tokens_post_padded_lora,
@@ -423,6 +425,9 @@ class FusedMoEWithLoRA(BaseLayerWithLoRA):
         self.max_loras = lora_config.max_loras
         self.fully_sharded = lora_config.fully_sharded_loras
 
+        self.lora_ranks = torch.tensor(
+            [0] * (max_loras + 1), dtype=torch.int, device=self.device
+        )
         self.adapter_enabled = torch.tensor(
             [0] * (max_loras + 1), dtype=torch.int, device=self.device
         )
@@ -545,6 +550,7 @@ class FusedMoEWithLoRA(BaseLayerWithLoRA):
 
         w1_lora_a, w2_lora_a, w3_lora_a = lora_a
         w1_lora_b, w2_lora_b, w3_lora_b = lora_b
+        self.lora_ranks[index] = w1_lora_a.shape[1]
         assert (
             num_experts
             == w1_lora_a.shape[0]
@@ -666,6 +672,9 @@ class FusedMoE3DWithLoRA(FusedMoEWithLoRA):
         self.max_loras = lora_config.max_loras
         self.fully_sharded = lora_config.fully_sharded_loras
 
+        self.lora_ranks = torch.tensor(
+            [0] * (max_loras + 1), dtype=torch.int, device=self.device
+        )
         self.adapter_enabled = torch.tensor(
             [0] * (max_loras + 1), dtype=torch.int, device=self.device
         )
@@ -719,6 +728,7 @@ class FusedMoE3DWithLoRA(FusedMoEWithLoRA):
 
         w13_lora_a, w2_lora_a = lora_a
         w13_lora_b, w2_lora_b = lora_b
+        self.lora_ranks[index] = w13_lora_a.shape[1]
 
         sliced_w13_lora_a = self._slice_w13_a(w13_lora_a)
         sliced_w13_lora_b = self._slice_w13_b(w13_lora_b)
