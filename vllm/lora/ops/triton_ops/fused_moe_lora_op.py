@@ -267,9 +267,19 @@ def _fused_moe_lora_kernel(
 
     # Adjust N (stack_num * max_rank) according to the specific LoRA adapter
     if IS_SHRINK:
+        # N0 = N
         N = tl.minimum(N, rank)
+        # if pid_m == 0 and pid_n == 0:
+        #     tl.device_print("rank", rank)
+        #     tl.device_print("N0", N0)
+        #     tl.device_print("N", N)
     else:
+        # K0 = K
         K = tl.minimum(K, rank)
+        # if pid_m == 0 and pid_n == 0:
+        #     tl.device_print("rank", rank)
+        #     tl.device_print("K0", K0)
+        #     tl.device_print("K", K)
 
     # Non-naive only: check num_tokens_post_padded
     if not naive_block_assignment:
