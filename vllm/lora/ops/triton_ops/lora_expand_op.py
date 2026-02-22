@@ -37,6 +37,7 @@ def _lora_expand_kernel(
     output_d0_stride,
     output_d1_stride,  # 1
     output_hs_ptr,
+    lora_ranks_ptr,
     BLOCK_M: tl.constexpr,
     BLOCK_N: tl.constexpr,
     BLOCK_K: tl.constexpr,
@@ -45,6 +46,7 @@ def _lora_expand_kernel(
     CAST_TYPE: tl.constexpr,
     SLICE_NUM: tl.constexpr,
     SAME_STRIDE: tl.constexpr,
+    SAME_RANK: tl.constexpr,
     USE_GDC: tl.constexpr,
     launch_pdl: tl.constexpr,
 ):
@@ -78,6 +80,8 @@ def _lora_expand_kernel(
         # Early exit CTA.
         return
 
+    curr_K = K if SAME_RANK else tl.load(lora_ranks_ptr + lora_id)
+
     # num rows this CTA should process.
     cta_m_len = min(BLOCK_M, lora_m_size - cta_m_offset)
 
@@ -99,7 +103,7 @@ def _lora_expand_kernel(
         lora_ptr,
         out_ptr,
         curr_N,
-        K,
+        curr_K,
         cta_m_len,
         ram,  # array identifying the rows of Input ptr to operate on
         slice_start_loc,
@@ -196,6 +200,8 @@ def _lora_expand(
         hidden_sizes_tensor,
         same_stride,
         MAX_N,
+        lora_ranks_tensor,
+        same_rank,
     ) = _get_lora_b_ptr(lora_b_weights, offset_start, inputs.device)
 
     K = lora_b_weights[0].shape[-1]  # K= rank
@@ -261,6 +267,7 @@ def _lora_expand(
         output_tensor.stride(0),
         output_tensor.stride(1),
         hidden_sizes_tensor,
+        lora_ranks_tensor,
         BLOCK_M,
         BLOCK_N,
         BLOCK_K,
@@ -269,6 +276,7 @@ def _lora_expand(
         CAST_TYPE,
         NUM_SLICES,
         same_stride,
+        same_rank,
         use_gdc,
         num_warps=NUM_WARPS,
         num_ctas=NUM_CTAS,

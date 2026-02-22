@@ -36,6 +36,7 @@ def _lora_shrink_kernel(
     output_d0_stride,
     output_d1_stride,
     output_d2_stride,
+    lora_ranks_ptr,
     BLOCK_M: tl.constexpr,
     BLOCK_N: tl.constexpr,
     BLOCK_K: tl.constexpr,
@@ -43,6 +44,7 @@ def _lora_shrink_kernel(
     SPLIT_K: tl.constexpr,
     GROUP_SIZE_M: tl.constexpr,
     SLICE_NUM: tl.constexpr,
+    SAME_RANK: tl.constexpr,
     USE_GDC: tl.constexpr,
     launch_pdl: tl.constexpr,
 ):
@@ -77,6 +79,8 @@ def _lora_shrink_kernel(
         # Early exit CTA.
         return
 
+    curr_N = N if SAME_RANK else tl.load(lora_ranks_ptr + lora_id)
+
     # num rows this CTA should process.
     cta_m_len = min(BLOCK_M, lora_m_size - cta_m_offset)
 
@@ -97,7 +101,7 @@ def _lora_shrink_kernel(
         input_ptr,
         lora_ptr,
         out_ptr,
-        N,
+        curr_N,
         K,
         cta_m_len,
         ram,  # array identifying the rows of Input ptr to operate on
@@ -186,7 +190,7 @@ def _lora_shrink(
 
     output_tensor.zero_()
 
-    (lora_ptr_tensor, lora_strides_d0, lora_strides_d1, lora_strides_d2) = (
+    (lora_ptr_tensor, lora_strides_d0, lora_strides_d1, lora_strides_d2, lora_ranks_tensor, same_rank) = (
         _get_lora_a_ptr(lora_a_weights, inputs.device)
     )
     N, K = lora_a_weights[0].shape[-2:]  # K=hidden_size,N=rank
@@ -243,6 +247,7 @@ def _lora_shrink(
         output_tensor.stride(0),
         output_tensor.stride(1),
         output_tensor.stride(2),
+        lora_ranks_tensor,
         BLOCK_M,
         BLOCK_N,
         BLOCK_K,
@@ -250,6 +255,7 @@ def _lora_shrink(
         SPLIT_K,
         GROUP_SIZE_M,
         NUM_SLICES,
+        same_rank,
         use_gdc,
         num_warps=NUM_WARPS,
         num_ctas=NUM_CTAS,

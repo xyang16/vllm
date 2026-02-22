@@ -258,6 +258,10 @@ def _fused_moe_lora_kernel(
     if lora_id == -1:
         return
     moe_enabled = tl.load(adapter_enabled + lora_id)
+    # if pid_m == 0 and pid_n == 0:
+    #     tl.device_print("!!!lora_id", lora_id)
+    #     tl.device_print("!!!lora_idx", lora_idx)
+    #     tl.device_print("!!!moe_enabled", moe_enabled)
     if moe_enabled == 0:
         return
     if lora_id >= max_loras:
@@ -268,14 +272,14 @@ def _fused_moe_lora_kernel(
     # Adjust N (stack_num * max_rank) according to the specific LoRA adapter
     if IS_SHRINK:
         # N0 = N
-        N = tl.minimum(N, rank)
+        N = rank
         # if pid_m == 0 and pid_n == 0:
         #     tl.device_print("rank", rank)
         #     tl.device_print("N0", N0)
         #     tl.device_print("N", N)
     else:
         # K0 = K
-        K = tl.minimum(K, rank)
+        K = rank
         # if pid_m == 0 and pid_n == 0:
         #     tl.device_print("rank", rank)
         #     tl.device_print("K0", K0)

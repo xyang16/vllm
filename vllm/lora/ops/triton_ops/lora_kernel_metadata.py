@@ -107,6 +107,8 @@ class LoRAKernelMeta:
         self.num_active_loras_cpu.fill_(0)
 
     def prepare_tensors(self, token_lora_mapping: torch.Tensor) -> None:
+        # import traceback
+        # print(f"!!!prepare_tensors stack_trace: {''.join(traceback.format_stack())}")
         """
         Prepare kernel metadata tensors for the current forward pass.
 

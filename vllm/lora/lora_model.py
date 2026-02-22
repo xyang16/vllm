@@ -231,6 +231,7 @@ class LoRAModel:
         else:
             raise ValueError(f"{lora_dir} doesn't contain tensors")
 
+        # print(f"!!!lora_model_id: {lora_model_id}")
         return cls.from_lora_tensors(
             lora_model_id=get_lora_id() if lora_model_id is None else lora_model_id,
             tensors=tensors,

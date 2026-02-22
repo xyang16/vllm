@@ -38,6 +38,7 @@ def _get_lora_a_ptr(lora_a_weights: list[torch.Tensor], device: torch.device):
     lora_strides_d1 = []
     lora_strides_d2 = []
     tensor_ptrs = []
+    lora_ranks = []
     for lora_a_weight in lora_a_weights:
         if lora_a_weight.ndim == 4:  # shape:(lora_num,1,size,rank)
             assert lora_a_weight.size(1) == 1
@@ -49,6 +50,7 @@ def _get_lora_a_ptr(lora_a_weights: list[torch.Tensor], device: torch.device):
         lora_strides_d0.append(lora_a_weight.stride(0))
         lora_strides_d1.append(lora_a_weight.stride(1))
         lora_strides_d2.append(lora_a_weight.stride(2))
+        lora_ranks.append(lora_a_weight.size(2))
     if len(lora_a_weights) > 1:
         lora_ptr_tensor = torch.tensor(tensor_ptrs, device=device, dtype=torch.uint64)
     else:
@@ -61,11 +63,20 @@ def _get_lora_a_ptr(lora_a_weights: list[torch.Tensor], device: torch.device):
     ):
         raise ValueError("All LoRA weights must have the same stride.")
 
+    if len(set(lora_ranks)) == 1:
+        lora_ranks_tensor = lora_ranks[0]
+        same_rank = True
+    else:
+        lora_ranks_tensor = torch.tensor(lora_ranks, device=device)
+        same_rank = False
+
     _LORA_A_PTR_DICT[key] = (
         lora_ptr_tensor,
         lora_strides_d0[0],
         lora_strides_d1[0],
         lora_strides_d2[0],
+        lora_ranks_tensor,
+        same_rank,
     )
     return _LORA_A_PTR_DICT.get(key)
 
@@ -90,6 +101,7 @@ def _get_lora_b_ptr(
     lora_strides_d1 = []
     lora_strides_d2 = []
     hidden_sizes = []
+    lora_ranks = []
     slice_offset = offset_start
     for lora_b_weight in lora_weights:
         if lora_b_weight.ndim == 4:  # shape:(lora_num,1,size,rank)
@@ -105,6 +117,7 @@ def _get_lora_b_ptr(
         slice_offset_lst.append(slice_offset)
         slice_offset += lora_b_weight.size(1)
         hidden_sizes.append(lora_b_weight.size(1))
+        lora_ranks.append(lora_b_weight.size(2))
 
     if len(lora_weights) > 1:
         # note these are device tensors
@@ -135,6 +148,14 @@ def _get_lora_b_ptr(
         lora_strides_d2_tensor = torch.tensor(lora_strides_d2, device=device)
         hidden_sizes_tensor = torch.tensor(hidden_sizes, device=device)
         same_stride = False
+
+    if len(set(lora_ranks)) == 1:
+        lora_ranks_tensor = lora_ranks[0]
+        same_rank = True
+    else:
+        lora_ranks_tensor = torch.tensor(lora_ranks, device=device)
+        same_rank = False
+
     # MAX_N is the maximum hidden size among all the lora_b weights
     MAX_N = max(hidden_sizes)
     _LORA_B_PTR_DICT[key] = (
@@ -146,6 +167,8 @@ def _get_lora_b_ptr(
         hidden_sizes_tensor,
         same_stride,
         MAX_N,
+        lora_ranks_tensor,
+        same_rank,
     )
     return _LORA_B_PTR_DICT.get(key)
 

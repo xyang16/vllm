@@ -229,6 +229,8 @@ class LoRAModelManager:
         self,
         lora_id: int,
     ) -> bool:
+        # import traceback
+        # logger.info(f"!!!activate_adapter stack_trace: {''.join(traceback.format_stack())}")
         """Move LoRA into a GPU buffer to be used in the forward pass."""
         if lora_id in self._active_adapters:
             return False

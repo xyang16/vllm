@@ -190,6 +190,9 @@ class PunicaWrapperBase(PunicaWrapperABC):
             extra_vocab_size,
             self.device,
         )
+        # print(f"!!!lora_index_to_id: {lora_index_to_id}")
+        # import traceback
+        # print(f"!!!_update_base_metadata stack_trace: {''.join(traceback.format_stack())}")
         self._token_lora_indices[: base_indices.shape[0]].copy_(base_indices)
         self._sampler_indices[: sampler_indices.shape[0]].copy_(sampler_indices)
         self._sampler_indices_padded[: sampler_indices_padded.shape[0]].copy_(

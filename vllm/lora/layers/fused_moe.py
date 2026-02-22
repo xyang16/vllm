@@ -244,6 +244,7 @@ class FusedMoEWithLoRA(BaseLayerWithLoRA):
                     )
                 #
 
+                # print(f"!!!act_decorator self.adapter_enabled: {self.adapter_enabled}")
                 self.punica_wrapper.add_lora_fused_moe(
                     input.view(-1, top_k, input.shape[-1]),
                     hidden_states,
@@ -717,6 +718,8 @@ class FusedMoE3DWithLoRA(FusedMoEWithLoRA):
         lora_a: torch.Tensor | list[torch.Tensor],
         lora_b: torch.Tensor | list[torch.Tensor],
     ):
+        # import traceback
+        # print(f"!!!set_lora stack_trace: {''.join(traceback.format_stack())}")
         """Overwrites lora tensors at index."""
         # Make mypy happy
         assert isinstance(lora_a, list)
@@ -724,7 +727,11 @@ class FusedMoE3DWithLoRA(FusedMoEWithLoRA):
         assert len(lora_a) == len(lora_b) == 2
 
         self.reset_lora(index)
+        # self.adapter_enabled[0] = 0
+        # self.adapter_enabled[1] = 0
+        # self.adapter_enabled[2] = 0
         self.adapter_enabled[index] = 1
+        # print(f"!!!set_lora self.adapter_enabled: {self.adapter_enabled}")
 
         w13_lora_a, w2_lora_a = lora_a
         w13_lora_b, w2_lora_b = lora_b
