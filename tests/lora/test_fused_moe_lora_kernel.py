@@ -154,7 +154,6 @@ def use_fused_moe_lora_kernel(
     expert_ids = torch.empty((max_loras * max_num_m_blocks,), dtype=torch.int32)
     num_tokens_post_padded = torch.empty((max_loras,), dtype=torch.int32)
     adapter_enabled = torch.ones(max_loras + 1, dtype=torch.int32)
-    lora_ids = torch.arange(max_loras + 1, dtype=torch.int32)
     lora_ranks = torch.full((max_loras + 1,), max_lora_rank, dtype=torch.int32)
 
     # call kernel
